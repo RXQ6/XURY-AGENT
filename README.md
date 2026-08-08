@@ -60,6 +60,8 @@ python main.py "你的主题" --provider qwen
 | `--provider` | 覆盖模型供应商：`mock/openai/qwen/hunyuan` |
 | `--max-iteration` | 覆盖质量门最大迭代次数（默认 3） |
 | `--output` | 指定输出 Markdown 路径 |
+| `--docs-dir` | 私有文档目录（.txt/.md/.pdf），用于 RAG 检索增强 |
+| `--export` | 导出交付物格式（逗号分隔）：`pdf,pptx,json,md` |
 | `--config` | 指定配置文件（默认 `config.yaml`） |
 
 ---
@@ -77,7 +79,10 @@ uvicorn app.server:app --host 127.0.0.1 --port 8000
 
 - `GET  /`                       前端页面（`app/static/index.html`）
 - `POST /api/generate/stream`    SSE 流式进度（实时推送每个节点事件，末帧含报告+指标）
-- `POST /api/generate`           JSON：`{"goal": "...", "provider": "mock", "max_iteration": 3, "api_key": "...可选", "base_url": "...可选"}`
+- `POST /api/generate`           JSON：`{"goal": "...", "provider": "mock", "max_iteration": 3, "api_key": "...可选", "base_url": "...可选", "docs_dir": "...可选"}`
+- `POST /api/export`             JSON：`{"report": "...", "metrics": {...}, "format": "pdf|pptx|json|md"}` → 返回可下载文件
+
+> 网页界面内置「文档目录（可选）」输入框与「导出 PDF / PPTX / JSON / MD」按钮：前者把你的私有资料灌入 RAG，后者把成稿一键导出为交付物。
 
 > 接真实模型（openai / qwen）：网页左侧新增「API Key（可选）」「Base URL（可选）」输入框，
 > 生成时随请求体发给后端（**不写进 URL**，更安全）；留空则继续读 `.env` 里的密钥。

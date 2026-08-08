@@ -26,6 +26,7 @@ from src.observability.tracer import Tracer
 from src.tools.rag import RAGRetriever
 from src.tools.web_search import WebSearch
 from src.tools.structured import StructuredOutput
+from src.tools.export import export_report
 
 
 def _slug(s: str) -> str:
@@ -54,6 +55,7 @@ def main(argv: list[str] | None = None) -> str:
     ap.add_argument("--provider", default=None, help="覆盖模型供应商：mock/openai/qwen/hunyuan")
     ap.add_argument("--max-iteration", type=int, default=None, help="覆盖质量门最大迭代次数")
     ap.add_argument("--docs-dir", default=None, help="私有文档目录（.txt/.md/.pdf），用于 RAG 检索增强")
+    ap.add_argument("--export", default=None, help="导出交付物格式，逗号分隔：pdf,pptx,json,md")
     args = ap.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -123,6 +125,17 @@ def main(argv: list[str] | None = None) -> str:
         "trace": tracer.summary(),
     }
     (out_dir / "last_run_metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if args.export:
+        base = out_path.with_suffix("")
+        for fmt in [f.strip().lower() for f in args.export.split(",") if f.strip()]:
+            try:
+                data, _, ext = export_report(report, metrics, fmt)
+                ep = out_dir / f"{base.name}.{ext}"
+                ep.write_bytes(data)
+                print(f"   📎 已导出：{ep}")
+            except ValueError as e:
+                print(f"   ⚠️ 导出 {fmt} 失败：{e}")
 
     print(f"\n✅ 报告已生成：{out_path}")
     print(f"   迭代轮数：{metrics['iterations']} ｜ 达标：{metrics['passed']} ｜ 评分：{metrics['score']}")

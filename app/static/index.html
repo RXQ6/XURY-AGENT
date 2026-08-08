@@ -29,6 +29,10 @@
   button { margin-top:14px; width:100%; padding:11px; border:0; border-radius:7px;
            background:var(--accent); color:#ffffff; font-weight:700; font-size:14px; cursor:pointer; }
   button:disabled { opacity:.6; cursor:not-allowed; }
+  .exports { margin-top:14px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+  .xbtn { width:auto; margin-top:0; padding:6px 12px; font-size:13px; background:var(--panel); color:var(--accent);
+          border:1px solid var(--accent); border-radius:7px; cursor:pointer; }
+  .xbtn:hover { background:var(--accent); color:#fff; }
   .roles { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
   .chip { font-size:12px; padding:4px 9px; border-radius:999px; border:1px solid #d6cfc3;
           color:var(--muted); background:#ffffff; transition:.2s; }
@@ -85,6 +89,13 @@
     <input id="docs_dir" placeholder="如 D:/docs，留空则不用私有文档" autocomplete="off" />
 
     <button id="go">▶ 生成报告</button>
+    <div class="exports">
+      <span class="hint">导出：</span>
+      <button type="button" class="xbtn" data-fmt="pdf">PDF</button>
+      <button type="button" class="xbtn" data-fmt="pptx">PPTX</button>
+      <button type="button" class="xbtn" data-fmt="json">JSON</button>
+      <button type="button" class="xbtn" data-fmt="md">MD</button>
+    </div>
     <div class="hint">默认 mock 模式无需任何 API Key 即可运行。</div>
 
     <div class="roles" id="roles">
@@ -111,6 +122,8 @@
 const $ = (s) => document.querySelector(s);
 const log = $("#log");
 const roles = $("#roles");
+let lastReport = "";
+let lastMetrics = {};
 
 function ts() {
   const d = new Date();
@@ -156,8 +169,10 @@ function handleEvent(ev) {
     // 节点完成（下一个节点开始时，上一个即视为完成）
     setTimeout(() => setRole(ev.node, "done"), 50);
   } else if (ev.type === "done") {
-    $("#report").innerHTML = marked.parse(ev.report || "");
-    renderMetrics(ev.metrics || {});
+    lastReport = ev.report || "";
+    lastMetrics = ev.metrics || {};
+    $("#report").innerHTML = marked.parse(lastReport);
+    renderMetrics(lastMetrics);
     appendLog("🎉 报告生成完成", "n");
     $("#go").disabled = false;
   }
@@ -216,6 +231,38 @@ $("#go").addEventListener("click", async () => {
     appendLog("⚠️ 连接中断：" + e, "");
     $("#go").disabled = false;
   }
+});
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.querySelectorAll(".xbtn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    if (!lastReport) { alert("请先生成报告再导出"); return; }
+    const fmt = btn.dataset.fmt;
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report: lastReport, metrics: lastMetrics, format: fmt }),
+      });
+      if (!res.ok) { alert("导出失败（HTTP " + res.status + "）"); return; }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="?([^"]+)"?/);
+      downloadBlob(blob, m ? m[1] : "report." + fmt);
+    } catch (e) {
+      alert("导出失败：" + e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 });
 </script>
 </body>

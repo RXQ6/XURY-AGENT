@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel
 
 from src.config import get, load_config
@@ -41,6 +41,7 @@ from src.observability.tracer import Tracer
 from src.tools.rag import RAGRetriever
 from src.tools.structured import StructuredOutput
 from src.tools.web_search import WebSearch
+from src.tools.export import export_report
 
 BASE = Path(__file__).resolve().parent
 ROOT = BASE.parent
@@ -205,6 +206,23 @@ async def generate(body: GenerateBody):
     if err:
         raise HTTPException(500, f"生成失败：{err[0]}")
     return JSONResponse({"report": result.get("report", ""), "metrics": result.get("metrics", {})})
+
+
+@app.post("/api/export")
+async def export_endpoint(body: Dict[str, Any]):
+    """把报告导出为 JSON / Markdown / PDF / PPTX，作为文件下载返回。"""
+    fmt = (body.get("format") or "pdf").lower()
+    report = body.get("report", "")
+    metrics = body.get("metrics", {})
+    try:
+        data, media, ext = export_report(report, metrics, fmt)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return Response(
+        content=data,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="report.{ext}"'},
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
