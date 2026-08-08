@@ -23,6 +23,7 @@ from src.observability.cost import CostMeter
 from src.observability.tracer import Tracer
 from src.tools.rag import RAGRetriever
 from src.tools.web_search import WebSearch
+from src.tools.structured import StructuredOutput
 
 
 def _build(threshold: int | None = None, max_iteration: int = 3):
@@ -34,11 +35,12 @@ def _build(threshold: int | None = None, max_iteration: int = 3):
     vs = VectorStore(persist_path=None)
     vs.add("关于 Agent 的记忆机制：分短期上下文与长期向量库两类。", source="builtin/memory")
     web, rag = WebSearch(), RAGRetriever(vs)
+    so = StructuredOutput(model)
     agents = {
         "researcher": Researcher(model, tools=[web, rag], config=cfg),
-        "analyst": Analyst(model, tools=[], config=cfg),
+        "analyst": Analyst(model, tools=[so], config=cfg),
         "writer": Writer(model, tools=[], config=cfg),
-        "critic": Critic(model, tools=[], config=cfg),
+        "critic": Critic(model, tools=[so], config=cfg),
     }
     ctx = WorkflowContext(model=model, agents=agents, tracer=Tracer(), cost=CostMeter(), config=cfg)
     return build_graph(ctx)
@@ -90,3 +92,33 @@ def test_vector_store_search():
     sources = [h["source"] for h in hits]
     assert "doc/langgraph" in sources
     assert "doc/weather" not in sources  # 无关文档不应进入 top-k
+
+
+def test_parallel_graph_structure():
+    """FR-3：dispatcher 并行扇出到 researcher 与 analyst，writer 扇入两者。"""
+    g = _build()
+    edges = {(e.source, e.target) for e in g.get_graph().edges}
+    # 并行扇出
+    assert ("dispatcher", "researcher") in edges
+    assert ("dispatcher", "analyst") in edges
+    # writer 扇入（等待两者都完成）
+    assert ("researcher", "writer") in edges
+    assert ("analyst", "writer") in edges
+    # 主链路其余边
+    assert ("planner", "dispatcher") in edges
+    assert ("writer", "critic") in edges
+
+
+def test_parallel_researcher_and_analyst_both_run():
+    """研究员与分析员应在同一轮中都被执行，并通过黑板合并产物。"""
+    g = _build()
+    res = g.invoke({
+        "goal": "向量数据库在 RAG 中的选型", "plan": [], "blackboard": {},
+        "draft": "", "critique": {}, "iteration": 0, "max_iteration": 3,
+        "final_report": "", "trace": [],
+    })
+    node_names = {t.get("node") for t in res.get("trace", [])}
+    assert "researcher" in node_names, "研究员节点应执行"
+    assert "analyst" in node_names, "分析员节点应执行"
+    assert res["final_report"], "应产出最终报告"
+

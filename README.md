@@ -11,6 +11,7 @@
 
 - **编排级工程能力**：LangGraph 状态机（节点 + 条件边）实现「分解 → 调度 → 角色 → 质量门 → 回流」。
 - **职责单一的角色**：每个 Agent 是独立 LLM 上下文，通过共享黑板（Blackboard）交换产物，互不污染 prompt。
+- **并行调度（FR-3）**：Dispatcher 并行扇出「研究员」「分析员」两条独立分支，撰写节点扇入等待两者都完成，运行时并发执行、缩短耗时。
 - **质量门迭代闭环**：Critic 按 rubric 打分，不达标带 feedback 回流 Writer；`max_iteration` 强制上限，防死循环。
 - **可观测 / 可度量**：每次调用记录 token 成本、节点耗时、迭代轮数，支持回归评测。
 - **多模型可切换**：统一 Model Adapter，内置 OpenAI / 通义千问 / 混元；默认 `mock` 离线即可跑通。
@@ -66,7 +67,7 @@ python main.py "你的主题" --provider qwen
 接入层 Interface    CLI / API：收目标、返回交付物
 编排层 Orchestration LangGraph 状态机（planner/dispatcher/researcher/analyst/writer/critic + quality_gate）
 角色层 Agents        研究员 │ 分析员 │ 撰写员 │ 评审员（独立 LLM 上下文）
-工具层 Tools        统一 Tool 接口：WebSearch / RAGRetriever
+工具层 Tools        统一 Tool 接口：WebSearch / RAGRetriever / StructuredOutput
 记忆层 Memory       共享黑板 Blackboard + 轻量向量库 VectorStore
 模型适配层 Model    统一 LLM 接口，多模型可切换 + token 计量
 可观测/评测层        tracer（耗时/调用）· cost（token/成本）· eval 评测集
@@ -79,16 +80,17 @@ flowchart TD
     A[用户目标] --> B[任务分解 Planner]
     B --> C[调度派发 Dispatcher]
     C --> D[研究员 Researcher]
-    D --> E[分析员 Analyst]
-    E --> F[撰写 Writer]
+    C --> E[分析员 Analyst]
+    D --> F[撰写 Writer]
+    E --> F
     F --> G[评审 Critic]
     G --> H{达标?}
     H -- 是 --> I[输出交付物]
     H -- 否 --> F
 ```
 
-> Dispatcher 对 Planner 产出的子任务 DAG 做拓扑排序；当前参考实现按拓扑顺序执行
-> （研究员 → 分析员 存在依赖），保证正确性。架构本身支持无依赖子任务并行。
+> **FR-3 并行调度**：Dispatcher 并行扇出到「研究员」与「分析员」两条独立分支（两者互不依赖，
+> 分析员仅基于目标/规划产出要点），撰写节点扇入等待两者都完成。运行时并发执行，可显著缩短耗时。
 
 ---
 
@@ -101,9 +103,9 @@ multi_agent_report/
 ├── requirements.txt
 ├── src/
 │   ├── config.py             # 配置加载
-│   ├── graph/                # state.py / builder.py（LangGraph 编排 + 质量门）
+│   ├── graph/                # state.py / builder.py / nodes.py（LangGraph 编排 + 质量门 + 并行调度）
 │   ├── agents/               # base / researcher / analyst / writer / critic
-│   ├── tools/                # base / web_search / rag
+│   ├── tools/                # base / web_search / rag / structured
 │   ├── memory/               # blackboard / vector_store
 │   ├── models/               # adapter + providers(mock/openai/qwen/hunyuan)
 │   └── observability/        # tracer / cost

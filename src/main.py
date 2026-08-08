@@ -25,6 +25,7 @@ from src.observability.cost import CostMeter
 from src.observability.tracer import Tracer
 from src.tools.rag import RAGRetriever
 from src.tools.web_search import WebSearch
+from src.tools.structured import StructuredOutput
 
 
 def _slug(s: str) -> str:
@@ -79,11 +80,12 @@ def main(argv: list[str] | None = None) -> str:
     _seed_corpus(vs, goal)
     web = WebSearch()
     rag = RAGRetriever(vs)
+    so = StructuredOutput(model)  # 结构化输出工具：分析师/评审员共用
     agents = {
         "researcher": Researcher(model, tools=[web, rag], config=cfg),
-        "analyst": Analyst(model, tools=[], config=cfg),
+        "analyst": Analyst(model, tools=[so], config=cfg),
         "writer": Writer(model, tools=[], config=cfg),
-        "critic": Critic(model, tools=[], config=cfg),
+        "critic": Critic(model, tools=[so], config=cfg),
     }
     ctx = WorkflowContext(model=model, agents=agents, tracer=tracer, cost=cost, config=cfg)
     graph = build_graph(ctx)

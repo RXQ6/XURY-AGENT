@@ -32,7 +32,11 @@ class Critic(BaseAgent):
             '{"score","breakdown":{"factual_accuracy","citation_completeness",'
             '"structure_clarity","coverage"},"feedback","passed"}'
         )
-        data = self._structured(prompt)
+        so = self._tool("StructuredOutput")
+        if so:
+            data = self._parse_json(so.execute(prompt=prompt, system=self.system_prompt))
+        else:
+            data = self._structured(prompt)
         score = int(data.get("score", 0))
         breakdown = data.get("breakdown", {})
         # 单项有 0 分视为不达标（防引用幻觉 / 重大缺陷漏判）

@@ -33,6 +33,7 @@ from src.observability.cost import CostMeter
 from src.observability.tracer import Tracer
 from src.tools.rag import RAGRetriever
 from src.tools.web_search import WebSearch
+from src.tools.structured import StructuredOutput
 
 EVAL_DIR = Path(__file__).resolve().parent
 ROOT = EVAL_DIR.parent
@@ -43,11 +44,12 @@ def run_one(cfg, goal: str, cost: CostMeter, tracer: Tracer):
     vs = VectorStore(persist_path=None)  # 评测不持久化向量库
     vs.add(f"关于「{goal}」的研究方法：先界定范围，再交叉验证来源，最后结构化成文。", source="builtin/method")
     web, rag = WebSearch(), RAGRetriever(vs)
+    so = StructuredOutput(model)
     agents = {
         "researcher": Researcher(model, tools=[web, rag], config=cfg),
-        "analyst": Analyst(model, tools=[], config=cfg),
+        "analyst": Analyst(model, tools=[so], config=cfg),
         "writer": Writer(model, tools=[], config=cfg),
-        "critic": Critic(model, tools=[], config=cfg),
+        "critic": Critic(model, tools=[so], config=cfg),
     }
     ctx = WorkflowContext(model=model, agents=agents, tracer=tracer, cost=cost, config=cfg)
     g = build_graph(ctx)
