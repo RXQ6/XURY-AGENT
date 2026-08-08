@@ -46,9 +46,9 @@ python main.py "对比 LangGraph 与 AutoGen 的优缺点"
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY / QWEN_API_KEY / HUNYUAN_SECRET_ID 等
-# 并把 config.yaml 的 model.provider 改为 openai / qwen / hunyuan
-python main.py "你的主题" --provider qwen
+# 编辑 .env，填入 OPENAI_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY / HUNYUAN_SECRET_ID 等
+# 并把 config.yaml 的 model.provider 改为 openai / deepseek / qwen / hunyuan
+python main.py "你的主题" --provider deepseek
 ```
 
 常用参数：
@@ -57,7 +57,7 @@ python main.py "你的主题" --provider qwen
 |------|------|
 | `goal` | 报告主题（位置参数） |
 | `--goal-file` | 从文件读取主题 |
-| `--provider` | 覆盖模型供应商：`mock/openai/qwen/hunyuan` |
+| `--provider` | 覆盖模型供应商：`mock/openai/deepseek/qwen/hunyuan` |
 | `--max-iteration` | 覆盖质量门最大迭代次数（默认 3） |
 | `--output` | 指定输出 Markdown 路径 |
 | `--docs-dir` | 私有文档目录（.txt/.md/.pdf），用于 RAG 检索增强 |
@@ -84,7 +84,7 @@ uvicorn app.server:app --host 127.0.0.1 --port 8000
 
 > 网页界面内置「文档目录（可选）」输入框与「导出 PDF / PPTX / JSON / MD」按钮：前者把你的私有资料灌入 RAG，后者把成稿一键导出为交付物。
 
-> 接真实模型（openai / qwen）：网页左侧新增「API Key（可选）」「Base URL（可选）」输入框，
+> 接真实模型（openai / deepseek / qwen）：网页左侧新增「API Key（可选）」「Base URL（可选）」输入框，
 > 生成时随请求体发给后端（**不写进 URL**，更安全）；留空则继续读 `.env` 里的密钥。
 > 混元需要 SecretId + SecretKey 两个密钥，仍请在 `.env` 中填写。
 
@@ -136,7 +136,7 @@ multi_agent_report/
 │   ├── agents/               # base / researcher / analyst / writer / critic
 │   ├── tools/                # base / web_search / rag / structured
 │   ├── memory/               # blackboard / vector_store
-│   ├── models/               # adapter + providers(mock/openai/qwen/hunyuan)
+│   ├── models/               # adapter + providers(mock/openai/deepseek/qwen/hunyuan)
 │   └── observability/        # tracer / cost
 ├── app/                      # 网页应用（FastAPI 接入层）：server.py + static/index.html
 ├── eval/                     # cases.json / run_eval.py

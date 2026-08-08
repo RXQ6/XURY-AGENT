@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional
 
 from .adapter import ModelAdapter
+from .providers.deepseek import DeepSeekProvider
 from .providers.hunyuan import HunyuanProvider
 from .providers.mock import MockProvider
 from .providers.openai import OpenAIProvider
@@ -15,6 +16,7 @@ _DEFAULT_PRICES = {
     "openai": (0.005, 0.015),
     "qwen": (0.004, 0.012),
     "hunyuan": (0.006, 0.018),
+    "deepseek": (0.001, 0.002),
 }
 
 _DEFAULT_MODEL = {
@@ -22,13 +24,16 @@ _DEFAULT_MODEL = {
     "openai": "gpt-4o-mini",
     "qwen": "qwen-plus",
     "hunyuan": "hunyuan-pro",
+    "deepseek": "deepseek-chat",
 }
 
 
 def build_model(cfg: Dict[str, Any], on_usage: Optional[Callable[[int, int, float], None]] = None) -> ModelAdapter:
     m = cfg.get("model", {})
     provider = m.get("provider", "mock")
-    model_name = m.get("model_name") or _DEFAULT_MODEL.get(provider, "mock-model")
+    raw_name = m.get("model_name")
+    # config.yaml 硬编码占位名 mock-model 视为「未指定」，交由具体 provider 用其默认模型名
+    model_name = raw_name if raw_name not in (None, "", "mock-model") else None
     temp = m.get("temperature", 0.3)
     max_tokens = m.get("max_tokens", 2048)
     pin, pout = _DEFAULT_PRICES.get(provider, (0.0, 0.0))
@@ -53,6 +58,8 @@ def build_model(cfg: Dict[str, Any], on_usage: Optional[Callable[[int, int, floa
         return OpenAIProvider(model_name, api_key=api_key, base_url=base_url, **common)
     if provider == "qwen":
         return QwenProvider(model_name, api_key=api_key, base_url=base_url, **common)
+    if provider == "deepseek":
+        return DeepSeekProvider(model_name, api_key=api_key, base_url=base_url, **common)
     if provider == "hunyuan":
         return HunyuanProvider(model_name, **common)
     raise ValueError(f"未知模型供应商: {provider}")

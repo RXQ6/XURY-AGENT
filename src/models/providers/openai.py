@@ -24,7 +24,8 @@ class OpenAIProvider(ModelAdapter):
         api_key: str | None = None,
         **kwargs,
     ) -> None:
-        super().__init__(model_name, **kwargs)
+        model_name = model_name or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        super().__init__(model_name=model_name, **kwargs)
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
 
