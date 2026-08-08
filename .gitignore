@@ -1,0 +1,18 @@
+# 依赖与缓存
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 密钥与本地配置
+.env
+
+# 运行产物（每次运行重新生成）
+outputs/
+*.jsonl
+eval/report.json
+eval/last_run_summary.txt
+
+# 编辑器
+.idea/
+.vscode/

@@ -1,0 +1,9 @@
+# 多智能体深度研究报告生成器 —— 依赖
+# 核心运行时（必装，离线可跑通 mock provider）
+langgraph>=0.2.0
+pydantic>=2.0
+python-dotenv>=1.0
+requests>=2.28
+pytest>=7.0
+# 可选：生产级向量库后端。默认使用内置轻量向量库（src/memory/vector_store.py），无需联网安装。
+# chromadb>=0.4

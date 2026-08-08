@@ -1,0 +1,30 @@
+# 多智能体深度研究报告生成器 · 运行配置
+# 说明：环境变量（.env）优先级高于本文件。未配置 API Key 时 provider=mock 可离线跑通。
+
+model:
+  provider: mock                 # mock | openai | qwen | hunyuan
+  model_name: mock-model
+  temperature: 0.3
+  max_tokens: 2048
+  # 成本计量单价（元 / 1K token），用于可观测层。可按实测修改。
+  price_per_1k_input: 0.0
+  price_per_1k_output: 0.0
+
+orchestration:
+  max_iteration: 3               # 质量门最大迭代次数（防死循环）
+  quality_threshold: 32          # rubric 总分阈值（满分 40）
+  budget_cap_cny: 2.0            # 单篇报告预算上限（元）
+
+rubric:
+  dimensions:
+    factual_accuracy: 10         # 事实准确性
+    citation_completeness: 10    # 引用完整性
+    structure_clarity: 10        # 结构清晰度
+    coverage: 10                 # 覆盖度
+
+observability:
+  trace_file: outputs/trace.jsonl   # 节点耗时 / 调用记录
+  cost_file: outputs/cost.json      # 累计 token 与成本
+
+output:
+  dir: outputs                    # 报告与中间产物输出目录
