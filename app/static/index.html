@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>多智能体深度研究报告生成器</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/static/marked.min.js"></script>
 <style>
   :root { --bg:#f4f4ef; --left:#f7f2e8; --right:#ffffff; --panel:#ffffff; --line:#e2ddd3;
           --text:#2d2a26; --muted:#7c7569; --accent:#2563eb; --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
@@ -162,6 +162,16 @@ function renderMetrics(m) {
     .join("");
 }
 
+function renderReport(md) {
+  // 如果 marked 库加载失败或解析异常，回退到原始 Markdown 文本，保证内容可见
+  try {
+    if (typeof marked === "undefined") throw new Error("marked 未加载");
+    $("#report").innerHTML = marked.parse(md);
+  } catch (e) {
+    $("#report").innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.7;">${md.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>`;
+  }
+}
+
 function handleEvent(ev) {
   if (ev.type === "node") {
     setRole(ev.node, "active");
@@ -172,7 +182,7 @@ function handleEvent(ev) {
   } else if (ev.type === "done") {
     lastReport = ev.report || "";
     lastMetrics = ev.metrics || {};
-    $("#report").innerHTML = marked.parse(lastReport);
+    renderReport(lastReport);
     renderMetrics(lastMetrics);
     appendLog("🎉 报告生成完成", "n");
     $("#go").disabled = false;

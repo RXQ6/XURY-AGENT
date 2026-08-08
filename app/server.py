@@ -26,6 +26,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.config import get, load_config
@@ -48,10 +49,12 @@ ROOT = BASE.parent
 STATIC = BASE / "static"
 
 app = FastAPI(title="多智能体深度研究报告生成器", version="1.0")
+# 挂载本地静态资源，避免前端依赖外部 CDN（中国大陆访问 jsdelivr 不稳定）
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 class GenerateBody(BaseModel):
-    """生成请求体。api_key / base_url 可选：网页端临时填入，仅 openai / qwen 生效，
+    """生成请求体。api_key / base_url 可选：网页端临时填入，仅 openai / qwen / deepseek 生效，
     且不写进 URL（避免密钥出现在地址栏与服务器日志）。"""
     goal: str
     provider: str = "mock"
@@ -172,10 +175,15 @@ async def generate_stream(body: GenerateBody):
 
     threading.Thread(target=run, daemon=True).start()
 
+    def _format_sse(payload: dict) -> str:
+        """按 SSE 规范序列化：payload 中若含换行，需拆分为多行 data:，最后以空行结束。"""
+        text = json.dumps(payload, ensure_ascii=False)
+        return "".join(f"data: {line}\n" for line in text.split("\n")) + "\n"
+
     async def event_gen():
         while True:
             ev = await queue.get()
-            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+            yield _format_sse(ev)
             if ev.get("type") == "done":
                 break
 
