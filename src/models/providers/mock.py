@@ -168,6 +168,38 @@ class MockProvider(ModelAdapter):
         ]
 
     # ---------- 报告正文 ----------
+    # 精简/标准档位选取的章节编号（与 _rich_*_report 的 ## N. 标题一一对应）。
+    # 保留原始编号是为了不破坏 AI 配图锚点（sec-3 / sec-7 等按原编号注入）。
+    _DEPTH_SECTIONS = {
+        "concise": {1, 3, 6, 7, 13},
+        "standard": {1, 2, 3, 4, 5, 6, 7, 8, 12, 13},
+    }
+
+    def _depth_from_prompt(self, prompt: str) -> str:
+        """从 Writer 的 prompt 解析篇幅档位（mock 模式下 Writer 不发真实模型，
+        但 prompt 已带【篇幅要求：精简/标准/详尽】，据此让离线报告也尊重 depth）。"""
+        m = re.search(r"【篇幅要求：(\S+?)】", prompt or "")
+        if not m:
+            return "detailed"
+        return {"精简": "concise", "标准": "standard", "详尽": "detailed"}.get(m.group(1), "detailed")
+
+    def _select_sections(self, body: str, depth: str) -> str:
+        """按 depth 选取连贯的子集章节；摘要始终保留，原编号不变（保留配图锚点）。"""
+        allowed = self._DEPTH_SECTIONS.get(depth)
+        if not allowed:
+            return body
+        chunks = re.split(r"(?m)^##\s+", body)
+        out = []
+        for chunk in chunks[1:]:
+            header = chunk.split("\n", 1)[0].strip()
+            m = re.match(r"^(\d+)\.", header)
+            if m:
+                if int(m.group(1)) in allowed:
+                    out.append("## " + chunk.rstrip("\n"))
+            else:
+                out.append("## " + chunk.rstrip("\n"))  # 摘要等非编号章节始终保留
+        return "\n\n".join(out)
+
     def _mock_report(self, goal: str, prompt: str = "") -> str:
         refs = _extract_refs(prompt)
         if not refs:
@@ -178,6 +210,9 @@ class MockProvider(ModelAdapter):
             body = self._rich_langgraph_autogen_report(goal)
         else:
             body = self._rich_generic_report(goal)
+
+        # mock 模式也尊重 depth：精简/标准只保留连贯子集章节
+        body = self._select_sections(body, self._depth_from_prompt(prompt))
 
         return f"# {goal}：深度研究报告\n\n{body}\n\n## References\n{references}\n"
 
