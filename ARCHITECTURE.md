@@ -16,9 +16,9 @@
 
 | 设计项 | 实现位置 |
 |--------|----------|
-| 编排层节点/边/质量门 | `src/graph/builder.py`（`_planner/_dispatcher/_researcher/_analyst/_writer/_critic` + `_quality_gate`） |
+| 编排层节点/边/质量门 | `src/graph/nodes.py`（节点工厂 `_planner/_dispatcher/_researcher/_analyst/_writer/_critic` + `_quality_gate` + `topo_sort`）；`src/graph/builder.py`（`build_graph` 组装并行边 + `WorkflowContext`） |
 | 角色层 4 类 Agent | `src/agents/{researcher,analyst,writer,critic}.py`，继承 `src/agents/base.py` |
-| 工具层统一接口 | `src/tools/base.py`（`Tool` 抽象）；`web_search.py` / `rag.py` |
+| 工具层统一接口 | `src/tools/base.py`（`Tool` 抽象）；`web_search.py` / `rag.py` / `structured.py`（`StructuredOutput`） |
 | 记忆层 | `src/memory/blackboard.py`（Blackboard）、`vector_store.py`（TF 向量 + 余弦，可持久化） |
 | 模型适配层 | `src/models/adapter.py`（`ModelAdapter`：`chat/complete/count_tokens/on_usage`）+ `providers/{mock,openai,qwen,hunyuan}.py` |
 | 质量门 / Critic | `src/agents/critic.py` + `config.yaml` 的 `quality_threshold` / `max_iteration` |
@@ -45,10 +45,10 @@ class ReportState(TypedDict):
 
 ## 5. 数据流转与算法（报告 §6）
 
-端到端步骤对应 `builder.py` 的节点链：
+端到端步骤对应 `nodes.py` / `builder.py` 的节点链：
 1. `planner_node`：LLM 将 goal 拆为 `plan`（子任务 + 依赖 + 角色）。
 2. `dispatcher_node`：拓扑排序，写入 `blackboard['schedule']`。
-3. `researcher_node` / `analyst_node`：写 `evidence` / `analysis` 到 blackboard。
+3. **FR-3 并行调度**：`dispatcher` 并行扇出到 `researcher_node` 与 `analyst_node`（两者互不依赖，独立 LLM 上下文），`writer_node` 扇入等待两者都完成；二者分别写 `evidence` / `analysis` 到 blackboard。
 4. `writer_node`：基于 blackboard 成文 → `draft`，`iteration += 1`。
 5. `critic_node`：打分 → `critique`；达标或达上限则写 `final_report`。
 6. 质量门条件边：达标→END；否则回流 `writer`。
@@ -67,6 +67,6 @@ class ReportState(TypedDict):
 ## 8. 实现说明与偏差
 
 - **`main.py` 位置**：CLI 入口同时存在于 `main.py`（根，兼容 `python main.py`）与 `src/main.py`（模块，兼容 `python -m src.main`）。
-- **并行度**：Dispatcher 产出 DAG 拓扑序；当前参考实现按拓扑顺序执行（研究员→分析员存在依赖），保证正确性；架构支持无依赖子任务并行。
+- **并行度（FR-3 已实现）**：`dispatcher` 并行扇出 `researcher` 与 `analyst` 两条分支，两者为独立 LLM 上下文、互不依赖（分析员仅基于 goal/plan 产出要点，不读研究员的 evidence），`writer` 扇入等待两者都完成。LangGraph 在运行时并发执行这两条分支，可观测层的 trace 会同时记录 `researcher` 与 `analyst` 节点。测试 `tests/test_pipeline.py::test_parallel_graph_structure` 断言了并行扇出/扇入边结构。
 - **离线可运行**：默认 `provider=mock`（`src/models/providers/mock.py`）使整条流水线无需 API Key 即可跑通与单测；接入真实模型仅改配置。
 - **向量库**：默认内置轻量向量库（零依赖）；`requirements.txt` 备注了可选 `chromadb`，接口保持一致，生产可替换。
