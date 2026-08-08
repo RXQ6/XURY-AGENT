@@ -55,10 +55,12 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 class GenerateBody(BaseModel):
     """生成请求体。api_key / base_url 可选：网页端临时填入，仅 openai / qwen / deepseek 生效，
-    且不写进 URL（避免密钥出现在地址栏与服务器日志）。"""
+    且不写进 URL（避免密钥出现在地址栏与服务器日志）。
+    depth：报告篇幅，concise(精简~6章)/standard(标准~10章)/detailed(详尽15章+)。"""
     goal: str
     provider: str = "mock"
     max_iteration: int = 3
+    depth: str = "detailed"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     docs_dir: Optional[str] = None
@@ -99,12 +101,15 @@ def _seed_corpus(vs: VectorStore, goal: str, docs_dir: Optional[str] = None) -> 
 def _build_and_run(goal: str, cfg: Dict, tracer: Tracer, cost: CostMeter,
                    provider: Optional[str] = None, max_iteration: Optional[int] = None,
                    out_dir: Optional[Path] = None, api_key: Optional[str] = None,
-                   base_url: Optional[str] = None, docs_dir: Optional[str] = None) -> tuple[str, Dict]:
+                   base_url: Optional[str] = None, docs_dir: Optional[str] = None,
+                   depth: str = "detailed") -> tuple[str, Dict]:
     """构建模型/Agent/图并同步运行，返回 (report, metrics)。需在独立线程内调用。"""
     if provider:
         cfg.setdefault("model", {})["provider"] = provider
     if max_iteration is not None:
         cfg.setdefault("orchestration", {})["max_iteration"] = max_iteration
+    if depth:
+        cfg.setdefault("orchestration", {})["depth"] = depth
     if api_key:
         cfg.setdefault("model", {})["api_key"] = api_key
     if base_url:
@@ -164,6 +169,7 @@ async def generate_stream(body: GenerateBody):
                 goal=body.goal, cfg=cfg, tracer=tracer, cost=cost,
                 provider=body.provider, max_iteration=body.max_iteration,
                 api_key=body.api_key, base_url=body.base_url, docs_dir=body.docs_dir,
+                depth=body.depth,
             )
             loop.call_soon_threadsafe(
                 queue.put_nowait, {"type": "done", "report": report, "metrics": metrics}
@@ -203,7 +209,7 @@ async def generate(body: GenerateBody):
                 goal=body.goal, cfg=load_config(), tracer=Tracer(),
                 cost=CostMeter(cap_cny=2.0), provider=body.provider,
                 max_iteration=body.max_iteration, api_key=body.api_key,
-                base_url=body.base_url, docs_dir=body.docs_dir,
+                base_url=body.base_url, docs_dir=body.docs_dir, depth=body.depth,
             )
         except Exception as e:
             err.append(str(e))

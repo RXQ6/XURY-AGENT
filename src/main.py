@@ -54,6 +54,8 @@ def main(argv: list[str] | None = None) -> str:
     ap.add_argument("--output", default=None, help="输出 Markdown 路径")
     ap.add_argument("--provider", default=None, help="覆盖模型供应商：mock/openai/qwen/hunyuan")
     ap.add_argument("--max-iteration", type=int, default=None, help="覆盖质量门最大迭代次数")
+    ap.add_argument("--depth", default=None, choices=["concise", "standard", "detailed"],
+                    help="报告篇幅：concise(约6章)/standard(约10章)/detailed(15章以上)")
     ap.add_argument("--docs-dir", default=None, help="私有文档目录（.txt/.md/.pdf），用于 RAG 检索增强")
     ap.add_argument("--export", default=None, help="导出交付物格式，逗号分隔：pdf,pptx,json,md")
     args = ap.parse_args(argv)
@@ -63,6 +65,8 @@ def main(argv: list[str] | None = None) -> str:
         cfg.setdefault("model", {})["provider"] = args.provider
     if args.max_iteration is not None:
         cfg.setdefault("orchestration", {})["max_iteration"] = args.max_iteration
+    if args.depth:
+        cfg.setdefault("orchestration", {})["depth"] = args.depth
 
     goal = args.goal
     if not goal and args.goal_file:

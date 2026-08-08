@@ -132,6 +132,7 @@ python main.py "你的主题" --provider openai
 | `--goal-file` | 从文件读取主题（与位置参数二选一） |
 | `--provider` | 覆盖模型供应商：`mock / openai / deepseek / qwen / hunyuan` |
 | `--max-iteration` | 覆盖质量门最大迭代次数（默认 3，防死循环） |
+| `--depth` | 报告篇幅：`concise`(约6章) / `standard`(约10章) / `detailed`(15章以上，默认) |
 | `--output` | 指定输出 Markdown 路径（默认 `outputs/report_<slug>.md`） |
 | `--docs-dir` | 私有文档目录（`.txt/.md/.pdf`），用于 RAG 检索增强 |
 | `--export` | 导出交付物格式（逗号分隔）：`pdf,pptx,json,md` |
@@ -184,6 +185,7 @@ uvicorn app.server:app --host 127.0.0.1 --port 8000
 - **报告主题**：输入你想研究的主题。
 - **模型供应商**：下拉选 `mock / openai / deepseek / qwen / hunyuan`。
 - **质量门最大迭代次数**：默认 3，可调 1–10。
+- **报告篇幅**：`精简(约6章) / 标准(约10章) / 详尽(15章以上，推荐)`。选「详尽」后 Writer 会被强制要求产出 ≥15 个 `##` 章节；导出 PPTX 时按章节拆页，轻松得到 15+ 张幻灯片。
 - **API Key（可选）**：选 openai / deepseek / qwen 时填入；随请求体发给后端（**不写进 URL**，更安全）；留空则读 `.env`。
 - **Base URL（可选）**：自定义兼容网关地址，留空用默认值。
 - **文档目录（可选）**：填 `.txt/.md/.pdf` 目录路径，把你的私有资料灌入 RAG。
@@ -206,6 +208,7 @@ uvicorn app.server:app --host 127.0.0.1 --port 8000
   "goal": "对比 LangGraph 与 AutoGen 的优缺点",
   "provider": "mock",
   "max_iteration": 3,
+  "depth": "detailed",
   "api_key": "...可选",
   "base_url": "...可选",
   "docs_dir": "...可选"

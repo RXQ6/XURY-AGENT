@@ -81,6 +81,14 @@
     <label>质量门最大迭代次数</label>
     <input id="max_iteration" type="number" value="3" min="1" max="10" />
 
+    <label>报告篇幅（章节数量）</label>
+    <select id="depth">
+      <option value="concise">精简（约 6 章）</option>
+      <option value="standard">标准（约 10 章）</option>
+      <option value="detailed" selected>详尽（15 章以上，推荐）</option>
+    </select>
+    <div class="hint">「详尽」会强制要求 ≥15 个章节，配合真模型可产出 15+ 页报告 / 幻灯片。</div>
+
     <label>API Key（可选，仅 openai / qwen / deepseek 需要）</label>
     <input id="api_key" type="password" placeholder="sk-... 留空则读 .env" autocomplete="off" />
     <label>Base URL（可选）</label>
@@ -204,6 +212,7 @@ $("#go").addEventListener("click", async () => {
     goal,
     provider: $("#provider").value,
     max_iteration: Number($("#max_iteration").value),
+    depth: $("#depth").value,
     api_key: $("#api_key").value.trim() || undefined,
     base_url: $("#base_url").value.trim() || undefined,
     docs_dir: $("#docs_dir").value.trim() || undefined,

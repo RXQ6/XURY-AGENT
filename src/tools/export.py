@@ -121,21 +121,27 @@ def _to_pptx(report_md: str, metrics: Dict) -> bytes:
         sections = [("报告内容", [ln.strip() for ln in lines if ln.strip()])]
 
     for sec_title, sec_body in sections:
-        s = prs.slides.add_slide(prs.slide_layouts[1])
-        s.shapes.title.text = sec_title
-        tf = s.placeholders[1].text_frame
-        tf.word_wrap = True
-        first = True
-        for b in sec_body:
-            b = re.sub(r"^[-*] ", "", b)
-            b = re.sub(r"\*\*", "", b)
-            b = re.sub(r"^#+\s*", "", b)
-            if not b:
-                continue
-            p = tf.paragraphs[0] if first else tf.add_paragraph()
-            p.text = b
-            p.font.size = Pt(16)
-            first = False
+        # 长章节自动分页，避免单页溢出被裁切
+        lines = [b for b in sec_body
+                 if re.sub(r"^[-*] ", "", re.sub(r"\*\*", "", re.sub(r"^#+\s*", "", b))).strip()]
+        chunk_size = 9
+        chunks = [lines[i:i + chunk_size] for i in range(0, max(len(lines), 1), chunk_size)] or [[""]]
+        for ci, chunk in enumerate(chunks):
+            s = prs.slides.add_slide(prs.slide_layouts[1])
+            s.shapes.title.text = sec_title + (f"（{ci + 1}/{len(chunks)}）" if len(chunks) > 1 else "")
+            tf = s.placeholders[1].text_frame
+            tf.word_wrap = True
+            first = True
+            for b in chunk:
+                b = re.sub(r"^[-*] ", "", b)
+                b = re.sub(r"\*\*", "", b)
+                b = re.sub(r"^#+\s*", "", b)
+                if not b.strip():
+                    continue
+                p = tf.paragraphs[0] if first else tf.add_paragraph()
+                p.text = b
+                p.font.size = Pt(16)
+                first = False
 
     # 指标幻灯片
     s = prs.slides.add_slide(prs.slide_layouts[1])
