@@ -15,6 +15,9 @@
 - **质量门迭代闭环**：Critic 按 rubric 打分，不达标带 feedback 回流 Writer；`max_iteration` 强制上限，防死循环。
 - **可观测 / 可度量**：每次调用记录 token 成本、节点耗时、迭代轮数，支持回归评测。
 - **多模型可切换**：统一 Model Adapter，内置 OpenAI / 通义千问 / 混元；默认 `mock` 离线即可跑通。
+- **真联网检索**：WebSearch 三后端 `mock / duckduckgo（零 Key）/ tavily`，报告可引用真实来源，不再靠占位引用。
+- **私有文档 RAG**：可注入你自己的 .txt/.md/.pdf，基于本地知识检索增强（网页版读不到你的私有资料）。
+- **交付物导出**：报告一键导出 JSON / PDF / PPTX。
 - **零依赖可运行**：内置轻量向量库（TF 向量 + 余弦相似度），无需联网安装 chromadb。
 
 ---
