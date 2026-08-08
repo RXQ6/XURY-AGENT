@@ -43,12 +43,16 @@ def build_model(cfg: Dict[str, Any], on_usage: Optional[Callable[[int, int, floa
         on_usage=on_usage,
     )
 
+    # 允许从配置透传密钥 / 网关地址（供网页端临时填入，避免写进 URL）
+    api_key = m.get("api_key")
+    base_url = m.get("base_url")
+
     if provider == "mock":
         return MockProvider(model_name, **common)
     if provider == "openai":
-        return OpenAIProvider(model_name, **common)
+        return OpenAIProvider(model_name, api_key=api_key, base_url=base_url, **common)
     if provider == "qwen":
-        return QwenProvider(model_name, **common)
+        return QwenProvider(model_name, api_key=api_key, base_url=base_url, **common)
     if provider == "hunyuan":
         return HunyuanProvider(model_name, **common)
     raise ValueError(f"未知模型供应商: {provider}")

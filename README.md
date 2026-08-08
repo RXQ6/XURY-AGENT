@@ -73,8 +73,12 @@ uvicorn app.server:app --host 127.0.0.1 --port 8000
 ```
 
 - `GET  /`                       前端页面（`app/static/index.html`）
-- `GET  /api/generate/stream`    SSE 流式进度（实时推送每个节点事件，末帧含报告+指标）
-- `POST /api/generate`           JSON：`{"goal": "...", "provider": "mock", "max_iteration": 3}`
+- `POST /api/generate/stream`    SSE 流式进度（实时推送每个节点事件，末帧含报告+指标）
+- `POST /api/generate`           JSON：`{"goal": "...", "provider": "mock", "max_iteration": 3, "api_key": "...可选", "base_url": "...可选"}`
+
+> 接真实模型（openai / qwen）：网页左侧新增「API Key（可选）」「Base URL（可选）」输入框，
+> 生成时随请求体发给后端（**不写进 URL**，更安全）；留空则继续读 `.env` 里的密钥。
+> 混元需要 SecretId + SecretKey 两个密钥，仍请在 `.env` 中填写。
 
 核心编排逻辑全部复用 `src/`，本层只做接入包装（对应设计报告 §3.1 接入层 CLI / API）。
 

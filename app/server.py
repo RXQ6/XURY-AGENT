@@ -5,8 +5,9 @@
 
 路由：
 - GET  /                      静态前端页面（app/static/index.html）
-- GET  /api/generate/stream   SSE 流式：逐个推送节点执行事件，末帧推送 done(报告+指标)
+- POST /api/generate/stream   SSE 流式：逐个推送节点执行事件，末帧推送 done(报告+指标)
 - POST /api/generate          JSON：一次性返回报告与指标
+（SSE 改用 POST 以在请求体中携带可选 api_key / base_url，避免密钥出现在 URL 与日志）
 
 启动：uvicorn app.server:app --host 127.0.0.1 --port 8000
 
@@ -23,8 +24,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from src.config import get, load_config
 from src.graph.builder import WorkflowContext, build_graph
@@ -45,6 +47,16 @@ ROOT = BASE.parent
 STATIC = BASE / "static"
 
 app = FastAPI(title="多智能体深度研究报告生成器", version="1.0")
+
+
+class GenerateBody(BaseModel):
+    """生成请求体。api_key / base_url 可选：网页端临时填入，仅 openai / qwen 生效，
+    且不写进 URL（避免密钥出现在地址栏与服务器日志）。"""
+    goal: str
+    provider: str = "mock"
+    max_iteration: int = 3
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 class StreamingTracer(Tracer):
@@ -77,12 +89,17 @@ def _seed_corpus(vs: VectorStore, goal: str) -> None:
 
 def _build_and_run(goal: str, cfg: Dict, tracer: Tracer, cost: CostMeter,
                    provider: Optional[str] = None, max_iteration: Optional[int] = None,
-                   out_dir: Optional[Path] = None) -> tuple[str, Dict]:
+                   out_dir: Optional[Path] = None, api_key: Optional[str] = None,
+                   base_url: Optional[str] = None) -> tuple[str, Dict]:
     """构建模型/Agent/图并同步运行，返回 (report, metrics)。需在独立线程内调用。"""
     if provider:
         cfg.setdefault("model", {})["provider"] = provider
     if max_iteration is not None:
         cfg.setdefault("orchestration", {})["max_iteration"] = max_iteration
+    if api_key:
+        cfg.setdefault("model", {})["api_key"] = api_key
+    if base_url:
+        cfg.setdefault("model", {})["base_url"] = base_url
 
     out_dir = out_dir or (ROOT / get(cfg, "output", "dir", default="outputs"))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -123,12 +140,8 @@ def _build_and_run(goal: str, cfg: Dict, tracer: Tracer, cost: CostMeter,
     return report, metrics
 
 
-@app.get("/api/generate/stream")
-async def generate_stream(
-    goal: str = Query(..., min_length=1, description="报告主题"),
-    provider: str = Query("mock"),
-    max_iteration: int = Query(3, ge=1, le=10),
-):
+@app.post("/api/generate/stream")
+async def generate_stream(body: GenerateBody):
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     tracer = StreamingTracer(queue=queue, loop=loop)
@@ -138,7 +151,9 @@ async def generate_stream(
     def run() -> None:
         try:
             report, metrics = _build_and_run(
-                goal, cfg, tracer, cost, provider=provider, max_iteration=max_iteration
+                goal=body.goal, cfg=cfg, tracer=tracer, cost=cost,
+                provider=body.provider, max_iteration=body.max_iteration,
+                api_key=body.api_key, base_url=body.base_url,
             )
             loop.call_soon_threadsafe(
                 queue.put_nowait, {"type": "done", "report": report, "metrics": metrics}
@@ -161,25 +176,19 @@ async def generate_stream(
 
 
 @app.post("/api/generate")
-async def generate(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(400, "请求体需为 JSON")
-    goal = (body.get("goal") or "").strip()
-    if not goal:
+async def generate(body: GenerateBody):
+    if not body.goal.strip():
         raise HTTPException(400, "goal 不能为空")
-    provider = body.get("provider", "mock")
-    max_iteration = int(body.get("max_iteration", 3))
-
     result: Dict[str, Any] = {}
     err: list = []
 
     def run() -> None:
         try:
             result["report"], result["metrics"] = _build_and_run(
-                goal, load_config(), Tracer(), CostMeter(cap_cny=2.0),
-                provider, max_iteration
+                goal=body.goal, cfg=load_config(), tracer=Tracer(),
+                cost=CostMeter(cap_cny=2.0), provider=body.provider,
+                max_iteration=body.max_iteration, api_key=body.api_key,
+                base_url=body.base_url,
             )
         except Exception as e:
             err.append(str(e))
