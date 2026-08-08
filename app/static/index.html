@@ -54,6 +54,9 @@
   #report pre { background:#f8fafc; padding:12px; border-radius:8px; overflow:auto; }
   #report a { color:var(--accent); text-decoration:none; }
   #report a:hover { text-decoration:underline; }
+  #report img { max-width:100%; height:auto; border-radius:8px; margin:12px 0;
+                box-shadow:0 1px 4px rgba(0,0,0,.1); display:block; }
+  #report img:first-child { margin-top:0; }
   .hint { color:var(--muted); font-size:12px; margin-top:8px; }
   /* 进度条 */
   .progress { position:relative; width:100%; height:24px; background:#e8e3d8; border-radius:12px;
@@ -220,6 +223,21 @@ function renderReport(md) {
   }
 }
 
+// 依据 done 事件返回的 images 映射，把封面图与章节配图注入 Markdown 一并渲染
+function injectImages(md, images) {
+  if (!md) return md;
+  images = images || {};
+  let out = md;
+  if (images.cover) {
+    out = `![封面背景](${images.cover})\n\n` + out;
+  }
+  if (images.sections) {
+    out = out.replace(/^##\s+(\d+)\..*$/gm, (m, num) =>
+      images.sections[num] ? `${m}\n\n![第${num}章配图](${images.sections[num]})\n` : m);
+  }
+  return out;
+}
+
 function handleEvent(ev) {
   if (ev.type === "node") {
     setRole(ev.node, "active");
@@ -231,7 +249,7 @@ function handleEvent(ev) {
   } else if (ev.type === "done") {
     lastReport = ev.report || "";
     lastMetrics = ev.metrics || {};
-    renderReport(lastReport);
+    renderReport(injectImages(lastReport, ev.images));   // 注入背景图/章节配图后渲染
     renderMetrics(lastMetrics);
     finishProgress();                    // 进度条置 100% 后淡出
     appendLog("🎉 报告生成完成", "n");

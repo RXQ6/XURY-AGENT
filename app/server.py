@@ -47,10 +47,29 @@ from src.tools.export import export_report
 BASE = Path(__file__).resolve().parent
 ROOT = BASE.parent
 STATIC = BASE / "static"
+IMAGES_DIR = ROOT / "outputs" / "images"
 
 app = FastAPI(title="多智能体深度研究报告生成器", version="1.0")
 # 挂载本地静态资源，避免前端依赖外部 CDN（中国大陆访问 jsdelivr 不稳定）
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+# 报告配图目录（封面图 cover.png / 章节图 sec-<N>.png），供网页前端按章节引用
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
+
+
+def _collect_images(out_dir: Path) -> Dict[str, object]:
+    """扫描报告图片目录，返回封面与章节配图的 Web 路径映射。"""
+    img_dir = Path(out_dir) / "images"
+    if not img_dir.exists():
+        return {"cover": None, "sections": {}}
+    sections: Dict[str, str] = {}
+    for f in img_dir.glob("sec-*.png"):
+        num = f.name[4:-4]  # "sec-3.png" -> "3"
+        if num.isdigit():
+            sections[num] = f"/images/{f.name}"
+    cover = f"/images/cover.png" if (img_dir / "cover.png").exists() else None
+    return {"cover": cover, "sections": sections}
 
 
 class GenerateBody(BaseModel):
@@ -182,8 +201,9 @@ async def generate_stream(body: GenerateBody):
                 api_key=body.api_key, base_url=body.base_url, docs_dir=body.docs_dir,
                 depth=body.depth,
             )
+            images = _collect_images(ROOT / "outputs")
             loop.call_soon_threadsafe(
-                queue.put_nowait, {"type": "done", "report": report, "metrics": metrics}
+                queue.put_nowait, {"type": "done", "report": report, "metrics": metrics, "images": images}
             )
         except Exception as e:  # 任何异常都保证流正常结束
             loop.call_soon_threadsafe(

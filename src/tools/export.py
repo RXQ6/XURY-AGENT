@@ -7,8 +7,48 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from pathlib import Path
 from typing import Dict, Tuple
+
+# 图片目录：src/tools/export.py -> 项目根/outputs/images
+IMAGES_ROOT = Path(__file__).resolve().parents[2] / "outputs" / "images"
+
+
+def _resolve_image(url: str):
+    """把 Markdown 图片 URL 解析为本地文件路径；找不到返回 None。"""
+    if not url:
+        return None
+    name = url.rsplit("/", 1)[-1]
+    candidates = []
+    if url.startswith("/images/"):
+        candidates.append(IMAGES_ROOT / name)
+    candidates.append(Path(url))  # 绝对路径或相对路径
+    for c in candidates:
+        try:
+            if c.exists():
+                return str(c)
+        except Exception:
+            continue
+    return None
+
+
+def _inject_images(report_md: str) -> str:
+    """扫描 images 目录，把封面图与章节配图以 Markdown 图片语法注入报告，
+    供 PDF/PPTX 渲染时识别并插入。章节图按 `## N.` 编号匹配 sec-<N>.png。"""
+    if not IMAGES_ROOT.exists():
+        return report_md
+    lines = report_md.splitlines()
+    out = []
+    if (IMAGES_ROOT / "cover.png").exists():
+        out.append("![封面背景](/images/cover.png)")
+    for ln in lines:
+        out.append(ln)
+        m = re.match(r"^##\s+(\d+)\.\s", ln)
+        if m and (IMAGES_ROOT / f"sec-{m.group(1)}.png").exists():
+            out.append(f"![第{m.group(1)}章配图](/images/sec-{m.group(1)}.png)")
+    return "\n".join(out)
 
 
 def _escape(s: str) -> str:
@@ -29,9 +69,9 @@ def export_report(report_md: str, metrics: Dict, fmt: str) -> Tuple[bytes, str, 
     if fmt == "md":
         return report_md.encode("utf-8"), "text/markdown", "md"
     if fmt == "pdf":
-        return _to_pdf(report_md, metrics), "application/pdf", "pdf"
+        return _to_pdf(_inject_images(report_md), metrics), "application/pdf", "pdf"
     if fmt == "pptx":
-        return _to_pptx(report_md, metrics), "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"
+        return _to_pptx(_inject_images(report_md), metrics), "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"
     raise ValueError(f"不支持的导出格式: {fmt}")
 
 
@@ -39,9 +79,17 @@ def export_report(report_md: str, metrics: Dict, fmt: str) -> Tuple[bytes, str, 
 def _to_pdf(report_md: str, metrics: Dict) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+    from reportlab.lib.utils import ImageReader
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+
+
+    def _pdf_image(path, width=460):
+        ir = ImageReader(path)
+        iw, ih = ir.getSize()
+        h = width * ih / float(iw) if iw else width
+        return Image(path, width=width, height=h)
 
     pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
     FONT = "STSong-Light"
@@ -62,6 +110,18 @@ def _to_pdf(report_md: str, metrics: Dict) -> bytes:
         line = line.rstrip()
         if not line.strip():
             flow.append(Spacer(1, 4))
+            continue
+        # 图片行：![alt](url) -> 插入图片（封面大图 / 章节配图）
+        if line.startswith("![") and "](" in line:
+            m = re.match(r"^!\[(.*?)\]\((.*?)\)$", line.strip())
+            if m:
+                path = _resolve_image(m.group(2))
+                if path:
+                    try:
+                        flow.append(_pdf_image(path))
+                        flow.append(Spacer(1, 6))
+                    except Exception:
+                        pass
             continue
         if line.startswith("## "):
             flow.append(Paragraph(_inline_md(line[3:]), h2))
@@ -87,7 +147,8 @@ def _to_pdf(report_md: str, metrics: Dict) -> bytes:
 # ---------- PPTX ----------
 def _to_pptx(report_md: str, metrics: Dict) -> bytes:
     from pptx import Presentation
-    from pptx.util import Pt
+    from pptx.util import Pt, Inches
+    from pptx.dml.color import RGBColor
 
     prs = Presentation()
     lines = report_md.splitlines()
@@ -102,6 +163,19 @@ def _to_pptx(report_md: str, metrics: Dict) -> bytes:
     slide.shapes.title.text = title_text
     if len(slide.placeholders) > 1:
         slide.placeholders[1].text = "多智能体协作生成 · 带引用深度研究报告"
+    # 封面背景图：作为标题幻灯片底层背景，标题文字改浅色以适配深色底图
+    cover = _resolve_image("/images/cover.png")
+    if cover:
+        try:
+            pic = slide.shapes.add_picture(cover, 0, 0, width=prs.slide_width, height=prs.slide_height)
+            sp_tree = slide.shapes._spTree
+            sp_tree.remove(pic._element)
+            sp_tree.insert(2, pic._element)  # 移到最底层，避免盖住标题
+            slide.shapes.title.text_frame.paragraphs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+            if len(slide.placeholders) > 1:
+                slide.placeholders[1].text_frame.paragraphs[0].font.color.rgb = RGBColor(0xDD, 0xE6, 0xF5)
+        except Exception:
+            pass
 
     # 按 ## 拆分内容幻灯片
     sections = []
@@ -137,6 +211,17 @@ def _to_pptx(report_md: str, metrics: Dict) -> bytes:
                 b = re.sub(r"\*\*", "", b)
                 b = re.sub(r"^#+\s*", "", b)
                 if not b.strip():
+                    continue
+                # 章节配图行：![alt](url) -> 在幻灯片底部插入图片
+                if b.strip().startswith("![") and "](" in b:
+                    m = re.match(r"^!\[(.*?)\]\((.*?)\)$", b.strip())
+                    if m:
+                        path = _resolve_image(m.group(2))
+                        if path:
+                            try:
+                                slide.shapes.add_picture(path, Inches(0.4), Inches(5.2), width=Inches(6.7))
+                            except Exception:
+                                pass
                     continue
                 p = tf.paragraphs[0] if first else tf.add_paragraph()
                 p.text = b
