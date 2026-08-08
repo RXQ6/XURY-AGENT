@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {"id": "c01", "goal": "对比 LangGraph 与 AutoGen 的优缺点"},
+    {"id": "c02", "goal": "大模型 Agent 的记忆机制有哪些？各有什么取舍？"},
+    {"id": "c03", "goal": "RAG 系统中如何降低检索噪声与幻觉？"},
+    {"id": "c04", "goal": "Function Calling 与 ReAct 范式有何差异？"},
+    {"id": "c05", "goal": "向量数据库选型：Chroma、FAISS、Milvus 怎么选？"},
+    {"id": "c06", "goal": "多智能体协作相比单智能体解决了什么问题？"},
+    {"id": "c07", "goal": "如何为 Agent 系统设计可观测与评测体系？"},
+    {"id": "c08", "goal": "Prompt 缓存对 LLM 应用成本有多大影响？"},
+    {"id": "c09", "goal": "Agent 的规划（Planning）能力如何实现与评估？"},
+    {"id": "c10", "goal": "意图识别在对话系统中为什么重要？常见做法有哪些？"},
+    {"id": "c11", "goal": "细粒度权限控制对企业级 Agent 的意义？"},
+    {"id": "c12", "goal": "如何用评测集防止 Prompt 改动导致的效果退化？"}
+  ]
+}
