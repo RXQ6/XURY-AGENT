@@ -5,7 +5,7 @@ model:
   provider: mock                 # mock | openai | qwen | hunyuan
   model_name: mock-model
   temperature: 0.3
-  max_tokens: 2048
+  max_tokens: 8192
   # 成本计量单价（元 / 1K token），用于可观测层。可按实测修改。
   price_per_1k_input: 0.0
   price_per_1k_output: 0.0
