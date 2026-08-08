@@ -53,6 +53,7 @@ def main(argv: list[str] | None = None) -> str:
     ap.add_argument("--output", default=None, help="输出 Markdown 路径")
     ap.add_argument("--provider", default=None, help="覆盖模型供应商：mock/openai/qwen/hunyuan")
     ap.add_argument("--max-iteration", type=int, default=None, help="覆盖质量门最大迭代次数")
+    ap.add_argument("--docs-dir", default=None, help="私有文档目录（.txt/.md/.pdf），用于 RAG 检索增强")
     args = ap.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> str:
     model = build_model(cfg, on_usage=cost)
 
     vs = VectorStore(persist_path=out_dir / "vector_store.json")
+    ingested = vs.add_dir(args.docs_dir) if args.docs_dir else 0
     _seed_corpus(vs, goal)
     web = WebSearch()
     rag = RAGRetriever(vs)
@@ -103,6 +105,8 @@ def main(argv: list[str] | None = None) -> str:
     }
 
     print(f"▶ 启动多智能体流水线，主题：{goal}")
+    if ingested:
+        print(f"   📚 已从私有文档摄入 {ingested} 个片段用于 RAG")
     result = graph.invoke(init)
 
     report = result.get("final_report") or result.get("draft") or ""

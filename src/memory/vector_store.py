@@ -66,6 +66,60 @@ class VectorStore:
             d["vec"] = self._embed(d["text"])
         self.save()
 
+    # ---------- 文档摄入（私有知识 RAG） ----------
+    @staticmethod
+    def _chunk(text: str, size: int = 400) -> List[str]:
+        """按段落/句切分为约 size 字的片段，便于细粒度检索。"""
+        paras = [p.strip() for p in re.split(r"\n\s*\n|\n", text) if p.strip()]
+        chunks, buf = [], ""
+        for p in paras:
+            if buf and len(buf) + len(p) > size:
+                chunks.append(buf)
+                buf = ""
+            buf = (buf + "\n" + p).strip()
+            while len(buf) > size:
+                chunks.append(buf[:size])
+                buf = buf[size:]
+        if buf:
+            chunks.append(buf)
+        return chunks or [text]
+
+    def _read_file(self, path: Path) -> str:
+        if path.suffix.lower() == ".pdf":
+            try:
+                import pypdf
+                reader = pypdf.PdfReader(str(path))
+                return "\n".join((pg.extract_text() or "") for pg in reader.pages)
+            except Exception:
+                return ""
+        return path.read_text(encoding="utf-8", errors="ignore")
+
+    def add_file(self, path: str | Path) -> int:
+        """摄入单个文件（.txt/.md/.pdf），返回摄入片段数。"""
+        p = Path(path)
+        if not p.exists():
+            return 0
+        text = self._read_file(p)
+        if not text.strip():
+            return 0
+        name = p.name
+        n = 0
+        for i, chunk in enumerate(self._chunk(text)):
+            self.add(chunk, source=f"{name}#chunk{i + 1}")
+            n += 1
+        return n
+
+    def add_dir(self, dir_path: str | Path, exts=(".txt", ".md", ".pdf")) -> int:
+        """递归摄入目录下所有受支持文件，返回摄入片段总数。"""
+        d = Path(dir_path)
+        if not d.exists():
+            return 0
+        total = 0
+        for f in sorted(d.rglob("*")):
+            if f.is_file() and f.suffix.lower() in exts:
+                total += self.add_file(f)
+        return total
+
     def search(self, query: str, k: int = 3) -> List[Dict]:
         qvec = self._embed(query)
         scored = []

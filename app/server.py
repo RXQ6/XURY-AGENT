@@ -57,6 +57,7 @@ class GenerateBody(BaseModel):
     max_iteration: int = 3
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    docs_dir: Optional[str] = None
 
 
 class StreamingTracer(Tracer):
@@ -76,21 +77,25 @@ class StreamingTracer(Tracer):
         return rec
 
 
-def _seed_corpus(vs: VectorStore, goal: str) -> None:
-    if vs.docs:
-        return
-    vs.add(f"关于「{goal}」的研究方法：应先界定范围，再交叉验证来源，最后结构化成文。",
-           source="builtin-corpus/method")
-    vs.add(f"「{goal}」的常见权衡：性能、成本与可扩展性往往相互制约，需结合场景取舍。",
-           source="builtin-corpus/tradeoff")
-    vs.add(f"撰写「{goal}」报告时，强制引用可溯源证据，可显著降低幻觉与编造风险。",
-           source="builtin-corpus/citation")
+def _seed_corpus(vs: VectorStore, goal: str, docs_dir: Optional[str] = None) -> int:
+    """摄入用户私有文档（可选）；无文档时回退内置语料，保证 mock 离线可跑。返回摄入片段数。"""
+    ingested = 0
+    if docs_dir:
+        ingested = vs.add_dir(docs_dir)
+    if not vs.docs:
+        vs.add(f"关于「{goal}」的研究方法：应先界定范围，再交叉验证来源，最后结构化成文。",
+               source="builtin-corpus/method")
+        vs.add(f"「{goal}」的常见权衡：性能、成本与可扩展性往往相互制约，需结合场景取舍。",
+               source="builtin-corpus/tradeoff")
+        vs.add(f"撰写「{goal}」报告时，强制引用可溯源证据，可显著降低幻觉与编造风险。",
+               source="builtin-corpus/citation")
+    return ingested
 
 
 def _build_and_run(goal: str, cfg: Dict, tracer: Tracer, cost: CostMeter,
                    provider: Optional[str] = None, max_iteration: Optional[int] = None,
                    out_dir: Optional[Path] = None, api_key: Optional[str] = None,
-                   base_url: Optional[str] = None) -> tuple[str, Dict]:
+                   base_url: Optional[str] = None, docs_dir: Optional[str] = None) -> tuple[str, Dict]:
     """构建模型/Agent/图并同步运行，返回 (report, metrics)。需在独立线程内调用。"""
     if provider:
         cfg.setdefault("model", {})["provider"] = provider
@@ -106,7 +111,7 @@ def _build_and_run(goal: str, cfg: Dict, tracer: Tracer, cost: CostMeter,
 
     model = build_model(cfg, on_usage=cost)
     vs = VectorStore(persist_path=out_dir / "vector_store.json")
-    _seed_corpus(vs, goal)
+    ingested = _seed_corpus(vs, goal, docs_dir)
     web, rag, so = WebSearch(), RAGRetriever(vs), StructuredOutput(model)
     agents = {
         "researcher": Researcher(model, tools=[web, rag], config=cfg),
@@ -135,6 +140,7 @@ def _build_and_run(goal: str, cfg: Dict, tracer: Tracer, cost: CostMeter,
         "score": crit.get("score"),
         "cost": cost.report(),
         "elapsed_s": round(elapsed, 2),
+        "ingested": ingested,
         "trace": tracer.summary(),
     }
     return report, metrics
@@ -153,7 +159,7 @@ async def generate_stream(body: GenerateBody):
             report, metrics = _build_and_run(
                 goal=body.goal, cfg=cfg, tracer=tracer, cost=cost,
                 provider=body.provider, max_iteration=body.max_iteration,
-                api_key=body.api_key, base_url=body.base_url,
+                api_key=body.api_key, base_url=body.base_url, docs_dir=body.docs_dir,
             )
             loop.call_soon_threadsafe(
                 queue.put_nowait, {"type": "done", "report": report, "metrics": metrics}
@@ -188,7 +194,7 @@ async def generate(body: GenerateBody):
                 goal=body.goal, cfg=load_config(), tracer=Tracer(),
                 cost=CostMeter(cap_cny=2.0), provider=body.provider,
                 max_iteration=body.max_iteration, api_key=body.api_key,
-                base_url=body.base_url,
+                base_url=body.base_url, docs_dir=body.docs_dir,
             )
         except Exception as e:
             err.append(str(e))

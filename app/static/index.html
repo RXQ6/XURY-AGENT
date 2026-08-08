@@ -81,6 +81,9 @@
     <label>Base URL（可选）</label>
     <input id="base_url" placeholder="留空用默认值" autocomplete="off" />
 
+    <label>文档目录（可选，RAG 用）</label>
+    <input id="docs_dir" placeholder="如 D:/docs，留空则不用私有文档" autocomplete="off" />
+
     <button id="go">▶ 生成报告</button>
     <div class="hint">默认 mock 模式无需任何 API Key 即可运行。</div>
 
@@ -135,6 +138,7 @@ function renderMetrics(m) {
     ["迭代轮数", m.iterations],
     ["达标", m.passed ? "是 ✅" : "否 ⚠️"],
     ["Critic 分", `${m.score}/40`],
+    ["检索片段", m.ingested ?? "-"],
     ["成本", `¥${c.cost_cny}`],
     ["Token", c.total_tokens ?? "-"],
     ["耗时", `${m.elapsed_s}s`],
@@ -176,6 +180,7 @@ $("#go").addEventListener("click", async () => {
     max_iteration: Number($("#max_iteration").value),
     api_key: $("#api_key").value.trim() || undefined,
     base_url: $("#base_url").value.trim() || undefined,
+    docs_dir: $("#docs_dir").value.trim() || undefined,
   };
 
   try {
