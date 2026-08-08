@@ -55,6 +55,13 @@
   #report a { color:var(--accent); text-decoration:none; }
   #report a:hover { text-decoration:underline; }
   .hint { color:var(--muted); font-size:12px; margin-top:8px; }
+  /* 进度条 */
+  .progress { position:relative; width:100%; height:24px; background:#e8e3d8; border-radius:12px;
+             overflow:hidden; margin-bottom:10px; }
+  .progress-bar { height:100%; width:0%; background:linear-gradient(90deg,#2563eb,#60a5fa);
+                  transition:width .3s ease; }
+  .progress-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+                   font-size:12px; font-weight:600; color:#1e3a8a; }
 </style>
 </head>
 <body>
@@ -122,6 +129,10 @@
 
   <!-- 右：报告 + 指标 -->
   <div class="card right">
+    <div class="progress" id="progress" style="display:none;">
+      <div class="progress-bar" id="progressBar"></div>
+      <span class="progress-text" id="progressText">准备中 0%</span>
+    </div>
     <div class="metrics" id="metrics"></div>
     <div id="report"><p class="hint">报告将在此处渲染。点击「生成报告」开始。</p></div>
   </div>
@@ -133,6 +144,35 @@ const log = $("#log");
 const roles = $("#roles");
 let lastReport = "";
 let lastMetrics = {};
+
+// ---------- 进度条 ----------
+const progressEl = $("#progress");
+const progressBar = $("#progressBar");
+const progressText = $("#progressText");
+let targetProgress = 0;
+const NODE_LABELS = {
+  planner: "规划任务", dispatcher: "调度分配", researcher: "检索取证",
+  analyst: "分析归纳", writer: "撰写报告", critic: "质量评审",
+};
+function startProgress() {
+  targetProgress = 0;
+  progressEl.style.display = "block";
+  progressBar.style.width = "0%";
+  progressText.textContent = "准备中 0%";
+}
+function setProgress(node, p) {
+  // 进度只前进不回退（critic 回流 writer 时，取较大值，避免视觉抖动）
+  targetProgress = Math.max(targetProgress, p || 0);
+  progressBar.style.width = targetProgress + "%";
+  const label = NODE_LABELS[node] || "生成中";
+  progressText.textContent = `${label} ${Math.round(targetProgress)}%`;
+}
+function finishProgress() {
+  targetProgress = 100;
+  progressBar.style.width = "100%";
+  progressText.textContent = "生成完成 100%";
+  setTimeout(() => { progressEl.style.display = "none"; }, 900);
+}
 
 function ts() {
   const d = new Date();
@@ -183,6 +223,7 @@ function renderReport(md) {
 function handleEvent(ev) {
   if (ev.type === "node") {
     setRole(ev.node, "active");
+    setProgress(ev.node, ev.progress);   // 动态进度条
     const chip = roles.querySelector(`[data-r="${ev.node}"]`);
     if (chip) chip.dataset.ms = `${ev.ms}ms`;
     // 节点完成（下一个节点开始时，上一个即视为完成）
@@ -192,6 +233,7 @@ function handleEvent(ev) {
     lastMetrics = ev.metrics || {};
     renderReport(lastReport);
     renderMetrics(lastMetrics);
+    finishProgress();                    // 进度条置 100% 后淡出
     appendLog("🎉 报告生成完成", "n");
     $("#go").disabled = false;
   }
@@ -205,8 +247,10 @@ $("#go").addEventListener("click", async () => {
   roles.querySelectorAll(".chip").forEach((c) => c.classList.remove("active", "done"));
   log.textContent = "";
   $("#metrics").innerHTML = "";
+  progressEl.style.display = "none";
   $("#report").innerHTML = '<p class="hint">生成中…</p>';
   $("#go").disabled = true;
+  startProgress();   // 显示进度条
 
   const payload = {
     goal,

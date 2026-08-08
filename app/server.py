@@ -66,6 +66,17 @@ class GenerateBody(BaseModel):
     docs_dir: Optional[str] = None
 
 
+# 流水线节点 -> 进度百分比（用于前端进度条）。critic 回流 writer 时进度会回退再前进，符合"修订"语义。
+NODE_PROGRESS = {
+    "planner": 10,
+    "dispatcher": 22,
+    "researcher": 44,
+    "analyst": 44,
+    "writer": 70,
+    "critic": 90,
+}
+
+
 class StreamingTracer(Tracer):
     """在原有 Tracer 基础上，把每次 record 事件经 asyncio.Queue 推给 SSE 消费者。"""
 
@@ -78,7 +89,7 @@ class StreamingTracer(Tracer):
         rec = super().record(name, ms, extra)
         if self.queue is not None and self.loop is not None:
             ev = {"type": "node", "node": rec.get("node"), "ms": rec.get("ms"),
-                  "extra": extra or {}}
+                  "extra": extra or {}, "progress": NODE_PROGRESS.get(rec.get("node"), 0)}
             self.loop.call_soon_threadsafe(self.queue.put_nowait, ev)
         return rec
 
