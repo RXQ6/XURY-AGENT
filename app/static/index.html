@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>多智能体深度研究报告生成器</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
+         --accent:#38bdf8; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { padding:18px 24px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  .wrap { display:grid; grid-template-columns: 360px 1fr; gap:16px; padding:16px 24px; }
+  @media (max-width: 900px){ .wrap { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input, select { width:100%; padding:9px 10px; background:#0b1220; color:var(--text);
+                  border:1px solid var(--line); border-radius:7px; font-size:14px; }
+  button { margin-top:14px; width:100%; padding:11px; border:0; border-radius:7px;
+           background:var(--accent); color:#06283d; font-weight:700; font-size:14px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .roles { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+  .chip { font-size:12px; padding:4px 9px; border-radius:999px; border:1px solid var(--line);
+          color:var(--muted); transition:.2s; }
+  .chip.active { background:var(--accent); color:#06283d; border-color:var(--accent); }
+  .chip.done { background:#0b3b2e; color:var(--ok); border-color:#0b3b2e; }
+  .log { height:240px; overflow:auto; font-family: ui-monospace, Consolas, monospace;
+         font-size:12px; line-height:1.6; background:#0b1220; border:1px solid var(--line);
+         border-radius:7px; padding:10px; white-space:pre-wrap; }
+  .log .t { color:var(--muted); }
+  .log .n { color:var(--accent); }
+  .metrics { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+  .metric { background:#0b1220; border:1px solid var(--line); border-radius:8px;
+            padding:8px 12px; font-size:13px; }
+  .metric b { color:var(--accent); }
+  #report { margin-top:12px; padding:18px; background:#0b1220; border:1px solid var(--line);
+            border-radius:8px; line-height:1.7; font-size:14px; overflow:auto; max-height:70vh; }
+  #report h1,#report h2,#report h3 { color:var(--accent); }
+  #report code { background:#1e293b; padding:1px 5px; border-radius:4px; }
+  #report a { color:var(--ok); }
+  .hint { color:var(--muted); font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 多智能体深度研究报告生成器</h1>
+  <p>输入主题 → Planner 分解 → Researcher / Analyst 并行 → Writer 成文 → Critic 质量门迭代</p>
+</header>
+
+<div class="wrap">
+  <!-- 左：控制面板 -->
+  <div class="card">
+    <label>报告主题</label>
+    <input id="goal" value="对比 LangGraph 与 AutoGen 的优缺点" />
+
+    <label>模型供应商</label>
+    <select id="provider">
+      <option value="mock">mock（离线，免 Key）</option>
+      <option value="openai">openai</option>
+      <option value="qwen">qwen（通义千问）</option>
+      <option value="hunyuan">hunyuan（混元）</option>
+    </select>
+
+    <label>质量门最大迭代次数</label>
+    <input id="max_iteration" type="number" value="3" min="1" max="10" />
+
+    <button id="go">▶ 生成报告</button>
+    <div class="hint">默认 mock 模式无需任何 API Key 即可运行。</div>
+
+    <div class="roles" id="roles">
+      <span class="chip" data-r="planner">Planner</span>
+      <span class="chip" data-r="dispatcher">Dispatcher</span>
+      <span class="chip" data-r="researcher">Researcher</span>
+      <span class="chip" data-r="analyst">Analyst</span>
+      <span class="chip" data-r="writer">Writer</span>
+      <span class="chip" data-r="critic">Critic</span>
+    </div>
+
+    <label style="margin-top:16px;">实时执行日志</label>
+    <div class="log" id="log">等待开始…</div>
+  </div>
+
+  <!-- 右：报告 + 指标 -->
+  <div class="card">
+    <div class="metrics" id="metrics"></div>
+    <div id="report"><p class="hint">报告将在此处渲染。点击「生成报告」开始。</p></div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const log = $("#log");
+const roles = $("#roles");
+let es = null;
+
+function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8);
+}
+function appendLog(text, cls = "") {
+  if (log.textContent.trim() === "等待开始…") log.textContent = "";
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="t">[${ts()}]</span> <span class="${cls}">${text}</span>`;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+function setRole(r, state) {
+  const el = roles.querySelector(`[data-r="${r}"]`);
+  if (!el) return;
+  el.classList.remove("active", "done");
+  if (state) el.classList.add(state);
+  if (state === "active") appendLog(`▶ ${r} 开始`, "n");
+  if (state === "done") appendLog(`✓ ${r} 完成 (${el.dataset.ms ?? ""})`, "n");
+}
+
+function renderMetrics(m) {
+  const c = m.cost || {};
+  const items = [
+    ["迭代轮数", m.iterations],
+    ["达标", m.passed ? "是 ✅" : "否 ⚠️"],
+    ["Critic 分", `${m.score}/40`],
+    ["成本", `¥${c.cost_cny}`],
+    ["Token", c.total_tokens ?? "-"],
+    ["耗时", `${m.elapsed_s}s`],
+  ];
+  $("#metrics").innerHTML = items
+    .map(([k, v]) => `<div class="metric">${k}: <b>${v}</b></div>`)
+    .join("");
+}
+
+$("#go").addEventListener("click", () => {
+  const goal = $("#goal").value.trim();
+  if (!goal) { alert("请填写主题"); return; }
+  if (es) es.close();
+
+  // 重置 UI
+  roles.querySelectorAll(".chip").forEach((c) => c.classList.remove("active", "done"));
+  log.textContent = "";
+  $("#metrics").innerHTML = "";
+  $("#report").innerHTML = '<p class="hint">生成中…</p>';
+  $("#go").disabled = true;
+
+  const params = new URLSearchParams({
+    goal, provider: $("#provider").value, max_iteration: $("#max_iteration").value,
+  });
+  es = new EventSource(`/api/generate/stream?${params}`);
+
+  es.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch { return; }
+    if (ev.type === "node") {
+      setRole(ev.node, "active");
+      const chip = roles.querySelector(`[data-r="${ev.node}"]`);
+      if (chip) chip.dataset.ms = `${ev.ms}ms`;
+      // 节点完成（下一个节点开始时，上一个即视为完成）
+      setTimeout(() => setRole(ev.node, "done"), 50);
+    } else if (ev.type === "done") {
+      $("#report").innerHTML = marked.parse(ev.report || "");
+      renderMetrics(ev.metrics || {});
+      appendLog("🎉 报告生成完成", "n");
+      es.close();
+      $("#go").disabled = false;
+    }
+  };
+  es.onerror = () => {
+    appendLog("⚠️ 连接中断", "");
+    $("#go").disabled = false;
+    if (es) es.close();
+  };
+});
+</script>
+</body>
+</html>

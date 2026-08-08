@@ -61,6 +61,23 @@ python main.py "你的主题" --provider qwen
 
 ---
 
+## 🌐 网页应用（FastAPI + 前端，可选）
+
+把流水线包装成带界面的「应用」：浏览器打开、输入主题、点「生成」，实时看到
+`Planner → Dispatcher → Researcher / Analyst（并行）→ Writer → Critic` 的执行过程与最终报告。
+
+```bash
+pip install fastapi uvicorn     # 仅网页模式需要（已写入 requirements.txt）
+uvicorn app.server:app --host 127.0.0.1 --port 8000
+# 浏览器打开 http://127.0.0.1:8000
+```
+
+- `GET  /`                       前端页面（`app/static/index.html`）
+- `GET  /api/generate/stream`    SSE 流式进度（实时推送每个节点事件，末帧含报告+指标）
+- `POST /api/generate`           JSON：`{"goal": "...", "provider": "mock", "max_iteration": 3}`
+
+核心编排逻辑全部复用 `src/`，本层只做接入包装（对应设计报告 §3.1 接入层 CLI / API）。
+
 ## 🧱 架构
 
 ```
@@ -109,6 +126,7 @@ multi_agent_report/
 │   ├── memory/               # blackboard / vector_store
 │   ├── models/               # adapter + providers(mock/openai/qwen/hunyuan)
 │   └── observability/        # tracer / cost
+├── app/                      # 网页应用（FastAPI 接入层）：server.py + static/index.html
 ├── eval/                     # cases.json / run_eval.py
 ├── tests/                    # test_pipeline.py
 └── outputs/                  # 生成的报告与中间产物（git 忽略）
